@@ -1,0 +1,422 @@
+---
+title: "A2 - Analitica descriptiva e inferencial"
+subtittle: "Estadística Avanzada"
+author:
+- Javier Gómez de Diego
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **1.  Lectura del fichero y preparación de los datos**
+
+Leemos y cargamos el fichero, cuyos valores están separados por el carácter "**,**"
+
+```{r}
+d <- read.csv("train_clean2.csv", sep=",")
+```
+
+Verificamos los datos.
+
+```{r}
+head(d)
+```
+
+Eliminamos la columna *X*.
+
+```{r}
+d <- d[-1]
+head(d)
+```
+
+# **2.  Coste de los siniestros**
+## **2.1.** Análisis visual
+
+### Diagrama de caja
+
+```{r}
+boxplot(d$UltCost, main="Costes siniestros", ylab="€", ylim=c(0, 30000))
+```
+
+### Transformación logarítmica y visualización
+
+```{r}
+UltCostLog <- log(d$UltCost)
+boxplot(UltCostLog, main="Costes siniestros", ylim=c(min(UltCostLog), max(UltCostLog)))
+```
+
+### Interpretación
+
+La variable original muestra una distribución asimétrica que se acumula mayormente alrededor de los 4.000€ y que presenta una larga cola hacia la derecha. En cambio, su transformación logarítmica refleja una mayor simetría con mayor densidad en el centro de la distribución.
+
+## **2.2.** Comprobación de normalidad
+
+### Inspección visual de normalidad
+
+```{r}
+hist(d$UltCost, main="Costes siniestros", xlab="€", breaks="FD", xlim=c(0, 50000))
+plot(density(d$UltCost), main="Costes siniestros: densidad", xlab="€", xlim=c(0, 50000))
+plot(ecdf(d$UltCost), main="Costes siniestros: acumulado", xlab="€", xlim=c(0, 50000))
+```
+
+Es evidente que esta variable no sigue una distribución normal, sino una distribución *Chi-square*.
+
+### Contraste de normalidad de Lilliefors
+
+```{r}
+nortest::lillie.test(d$UltCost)
+```
+
+Debido a que el ***p-valor*** es mucho menor que *0.05*, se puede rechazar con gran certeza la hipótesis nula de que los datos siguen una distribución normal.
+
+### Inspección visual y contraste de normalidad a la variable *UltCost* en escala logarítmica
+
+```{r}
+hist(UltCostLog, main="Costes siniestros (escala logarítmica)", breaks="FD", xlim=c(min(UltCostLog), max(UltCostLog)))
+plot(density(UltCostLog), main="Costes siniestros (escala logarítmica): densidad", xlim=c(min(UltCostLog), max(UltCostLog)))
+plot(ecdf(UltCostLog), main="Costes siniestros (escala logarítmica): acumulado", xlim=c(min(UltCostLog), max(UltCostLog)))
+```
+
+La inspección visual permite ver que los datos en escala logarítmica sí se asemejan a una distribución normal. Para confirmarlo, realizaremos nuevamente el contraste de normalidad de Lilliefors.
+
+```{r}
+nortest::lillie.test(UltCostLog)
+```
+
+En este caso, el ***p-valor*** es mayor que *0.05*, por lo que se puede afirmar con cierta confianza que los datos en escala logarítmica sí siguen una distribución normal.
+
+## **2.3.**  Intervalo de confianza de la media poblacional de la variable *UltCost*
+
+### Cálculo manual del intervalo de confianza
+
+```{r}
+ic95 <- c(
+  mean(d$UltCost) - (qnorm((1 - 0.05 / 2)) * sd(d$UltCost) / sqrt(length(d$UltCost))),
+  mean(d$UltCost) + (qnorm((1 - 0.05 / 2)) * sd(d$UltCost) / sqrt(length(d$UltCost)))
+)
+cat("El intervalo de confianza al 95% de la media poblacional es [", ic95[1], ", ", ic95[2], "]")
+```
+
+Obtenemos el intervalo **[*9938.86*, *10356.47*]**
+
+***¿Podemos asumir la hipótesis de normalidad para el cálculo del intervalo de confianza sobre la media
+muestral del coste en escala original?***
+
+Para el cálculo del intervalo de la media muestral **sí** se puede asumir normalidad dedio a que el Teorema del Límite Central asegura que las medias muestrales se asemejan a una distribución normal para muestras suficientemente grandes, en este caso *n* = ***50526***.
+
+### Interpretación del intervalo de confianza
+
+Se puede afirmar al 95% de confianza que la media poblacional de la variable *UltCost* inferida a partir de la muestra se encuentra entre *9938.86* y *10356.47*.
+
+# **3. Coste inicia y final de los siniestros**
+## **3.1.** Justificación del test a aplicar
+
+La pregunta nos pide explícitamente estudiar si IniCost es igual a UltCost. Esto podría ser un tanto ambiguo debido al entendimiento que se tenga de qué medidas hacen iguales a dos variables; sin embargo, el planteamiento que se hace la compañía nos saca de dudas: están interesados en conocer si, en **promedio**, las estimaciones **son sufucientes** para cubrir los costes. Dicho de otra forma: si la media de *Inicost* es mayor o igual que la media de *UltCost* o, lo que es lo mismo, si la media de *UltCost* es estrictamente menor que *IniCost*. Por lo tanto, estamos ante un caso de contraste de hipótesis **unilateral** de dos muestras **emparejadas**, debido a que no son independientes ya que las estimaciones se hacen en base a predicciones de los costes (se puede interpretar como una variante un test *Pre-Post*).
+
+Para afrontar este test, hay que calcular la diferencia entre ambas variables (***dif*** = *IniCost* - *UltCost*) y ralizar el test sobre la muestra de las diferencias.
+
+## **3.2.** Hipótesis nula y alternativa
+
+**H~0~**: *$\mu$~dif~ = 0*
+
+**H~1~**: *$\mu$~dif~ > 0*
+
+## **3.3.** Cálculos
+
+Desconocemos la varianza poblacional, por lo que seguirá un distribución *t de Student*.
+
+Primero, calculamos la diferencia de ambas variables:
+
+```{r}
+dif <- d$IniCost - d$UltCost
+hist(dif, main="Diferencia estimación y coste", breaks="FD", xlab="€", xlim=c(-10000, 10000))
+```
+
+Ahora, calculamos el estadístico *t*:
+
+```{r}
+t <- mean(dif) / (sd(dif) / sqrt(length(dif)))
+t
+```
+
+Ya podemos obtener la región de aceptación al 95% de confianza:
+
+```{r}
+a <- 0.05
+r <- mean(dif) + (qt(a, df=length(dif)-1) * sd(dif) / sqrt(length(dif)))
+r
+```
+
+La región de aceptación es **[-2330.1, INF]**.
+
+Calculamos el *p-valor* para conocer la probabilidad de equivocarnos al rechazar **H~0~**:
+
+```{r}
+p <- pt(t, lower.tail=FALSE, df=length(dif)-1)
+p
+```
+
+## **3.4.** Conclusión
+
+Al estar el valor observado *t* dentro de la región de aceptación y obtener un *p-valor* igual a ***1***, no podemos rechazar la hipótesis nula en favor de la hipótesis alternativa. Por lo tanto, **no podemos asegurar** con un 95% de confianza que las estimaciones de los costes de los siniestros sean suficientes como para cubrir los costes reales.
+
+## **3.5.** Comprobación
+
+Realizamos el *t.test*:
+
+```{r}
+t.test(dif, alternative="greater")
+```
+
+Los valores del estadístico *t*, el *p-valor* y la región de aceptación *r* coinciden con los calculado manualmente.
+
+# **4. Diferencia de salario según género**
+## **4.1.** Ánalisis visual
+
+Separamos los datos de la variables *WeeklyWages* en dos muestras según el género y viasualizamos:
+
+```{r}
+m <- d$WeeklyWages[d$Gender=="M"]
+f <- d$WeeklyWages[d$Gender=="F"]
+boxplot(log(m), main="Ingresos semanales: hombres", breaks="FD", ylim=c(2, 9))
+boxplot(log(f), main="Ingresos semanales: mujeres", breaks="FD", ylim=c(2, 9))
+```
+
+## **4.2.** Interpretación
+
+Se puede ver que la distribución de los ingresos de los hombres tiene una menor varianza que la de las mujeres, ya que los cuartiles están más separados en esta última (esto se comprobará más adelante con un test de homoscedasticidad). También se puede apreciar que la media es ligeramente mayor en los ingresos de los hombres.
+
+## **4.3.** Hipótesis nula y alternativa
+
+**H~0~**: *$\mu$~m~ = $\mu$~f~*
+
+**H~1~**: *$\mu$~m~ > $\mu$~f~*
+
+## **4.4.** Justificación del test a aplicar
+
+Se trata de un test **unilateral** (se pregunta si los hombres solo cobran más que las mujeres) de dos **muestras independientes** en el que se desconocen las varianzas. Para saber si éstas son iguales, realizamos un test de igualdad de varianzas u **homoscedasticidad**:
+
+```{r}
+var.test(m, f)
+```
+
+El valor observado *F* = *1.408* está dentro del intervalo del 95% de confianza [*1.367*, *1.450*], pero el *p-valor* es aproximadamente igual a *0*, por lo que se puede rechazar la homoscedasticidad: consideramos **varianzas distintas.**
+
+## **4.5.** Cálculos
+
+Definimos la función para realizar el test:
+
+```{r}
+test.contraste.heteroscedicidad <- function(m, f, a, lowertrail){
+  t <- (mean(m) - mean(f)) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+  
+  df <- ((var(m)/length(m)) + (var(f)/length(f)))^2 / (((var(m)/length(m))^2 / (length(m)-1))+(((var(f)/length(f))^2 / (length(f)-1))))
+  
+  p <- pt(t, lower.tail=lowertrail, df=df)
+  
+  if (lowertrail){
+    r <- (mean(m) - mean(f)) + (pt(a, df=df) * ((var(m)/length(m)) + (var(f)/length(f)))) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+    
+    cat("t = ", t, "\nGrados de libertad = ", df, "\nRegión de aceptación = ( -Inf, ", r, "]\np-valor = ", p)
+    
+  } else{
+    r <- (mean(m) - mean(f)) + (qt(a, df=df) * ((var(m)/length(m)) + (var(f)/length(f)))) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+    
+    cat("t = ", t, "\nGrados de libertad = ", df, "\nRegión de aceptación = [", r, ", Inf )\np-valor = ", p)
+    
+  }
+}
+```
+
+Llamamos a la función con los conjuntos de datos *m* y *f*, alfa = *0.05* y lowertrail = *FALSE*, ya que el contraste de hipótesis en este caso es unilateral por la derecha:
+
+```{r}
+test.contraste.heteroscedicidad(m, f, 0.05, FALSE)
+```
+
+## **4.6.** Conclusión
+
+Debido a que el valor observado *t* no está dentro de la región de aceptación y el *p-valor* es *0*, se puede rechazar la hipótesis nula en favor de la alternativa, por lo que se puede afirmar al 95% de confianza que el promedio de los ingresos semanales de los hombres **sí** es mayor que el de las mujeres.
+
+## **4.7.** Comprobación
+
+Realizamos el *t.test*:
+
+```{r}
+t.test(m, f, alternative="greater", var.equal=FALSE)
+```
+
+Los datos coinciden con los calculados manualmente en la función *test.contraste.heteroscedicidad*.
+
+# **5. Salario semanal (II)**
+
+Esta pregunta es esencialmente la misma que la del apartado anterior. La única diferencia es que nos preguntan *si los hombres cobran más de 50€ en promedio que las mujeres*, mientras que antes se podía entender *si los hombres cobran más de 0€ en promedio que las mujeres*.
+
+Por lo tanto, reformulando la pregunta de este apartado, entendemos que ésta sería ***si los hombres cobran más en promedio que las mujeres, si incrementamos el de éstas en 50€***.
+
+## **5.1.** Hipótesis nula y alternativa
+
+**H~0~**: *$\mu$~m~ = $\mu$~f~ + 50*
+
+**H~1~**: *$\mu$~m~ > $\mu$~f~ + 50*
+
+## **5.2.** Justificación del test a aplicar
+
+Incrementaremos los ingresos semanales de las mujeres en 50€ y realizaremos exactamente el mismo test que en el apartado anterior, en el que ya realizamos el test de homoscedasticidad y pudimos rechazar que las varianzas fueran iguales. Esto se debe a que las varianzas no cambian al incrementar, en la misma medida, todos los valores una de las dos variables.
+
+Por lo tanto, se trata de un test **unilateral** de dos **muestras independientes** en el que se desconocen las varianzas, pero sabemos que son distintas.
+
+## **5.3.** Cálculos
+
+Incrementamos los ingresos semanales de las mujeres en 50€:
+
+```{r}
+f50 <- f + 50
+```
+
+Llamamos a la función *test.contraste.heteroscedicidad* con los datos *m* y *f50*, alfa = *0.05* y lowertrail = *FALSE*:
+
+```{r}
+test.contraste.heteroscedicidad(m, f50, 0.05, FALSE)
+```
+
+## **5.4.** Conclusión
+
+Debido a que el valor observado *t* no está dentro de la región de aceptación y el *p-valor* es *0*, se puede rechazar la hipótesis nula en favor de la alternativa, por lo que se puede afirmar al 95% de confianza que el promedio de los ingresos semanales de los hombres **sí** es al menos 50€ mayor que el de las mujeres.
+
+## **5.5.** Comprobación
+```{r}
+t.test(m, f50, alternative="greater", var.equal=FALSE)
+```
+
+Los datos coinciden con los calculados manualmente en la función *test.contraste.heteroscedicidad*.
+
+# **6. Diferencia de jornada según género**
+
+## **6.1.** Ánalisis visual
+
+Separamos los datos de la variables *WeeklyWages* en dos muestras según el género y viasualizamos:
+
+```{r}
+m <- d$PartTimeFullTime[d$Gender=="M"]
+f <- d$PartTimeFullTime[d$Gender=="F"]
+b <- barplot(prop.table(table(m))*100, main="Jornadas: hombres", xlab="Tipo de jornada", ylab="%", ylim=c(0, 110), las=1)
+text(b, prop.table(table(m))*100, label = paste(round(prop.table(table(m))*100, 2), "%"), pos=3, cex=0.8)
+b <- barplot(prop.table(table(f))*100, main="Jornadas: mujeres", xlab="Tipo de jornada", ylab="%", ylim=c(0, 110), las=1)
+text(b, prop.table(table(f))*100, label = paste(round(prop.table(table(f))*100, 2), "%"), pos=3, cex=0.8)
+```
+
+## **6.2.** Interpretación
+
+En proporción, las mujeres **sí** trabajn más a media jornada que a jornada completa que los hombres: el *22.5*% de ellas frente al *5.1*% de ellos.
+
+## **6.3.** Hipótesis nula y alternativa
+
+**H~0~**: *p~m~ = p~f~*
+
+**H~1~**: *p~m~ $\not=$ p~f~*
+
+## **6.4.** Tipo de test
+
+Se trata de un contraste de hipótesis **bilateral** de dos muestras independientes, ya que se pregunta si la proporción es distinta, por lo que se debe evaluar tanto si es mayor como menor. 
+
+## **6.5.** Cálculos
+
+Obtenemos las proporciones de hombres y mujeres que trabajan a jornada completa con respecto a los que trabajan media jornada:
+
+```{r}
+p1 <- length(m[m=="F"])/length(m)
+p2 <- length(f[f=="F"])/length(f)
+```
+
+Obtenemos el parámetro *p* y el valor observado:
+
+```{r}
+p <- (length(m)*p1 + length(f)*p2) / (length(m)+length(f))
+o <- (p1-p2)/(sqrt(p*(1-p)*(1/length(m)+1/length(f))))
+c1 <- qnorm(0.05/2, lower.tail=FALSE)
+c2 <- qnorm(0.05/2, lower.tail=TRUE)
+pvalue <- pnorm(o, lower.tail=FALSE)*2
+cat("Valor observado = ", o, "\nValor crítico por la izquierda = ", c1, "\nValor crítico por la derecha = ", c2, "\np-valor = ", pvalue)
+```
+
+## **6.6.** Conclusión
+
+Al estar el valor observado a la derecha de ambos valores críticos, y el *p-valor* es igual a *0*, podemos rechazar la hipótesis nula a favor de la alternativa. Por lo tanto, la proporción de personas que trabajan a tiempo completo **sí** es diferente para hombres que para mujeres; concretamente, la proporción es mayor en los hombres que en las mujeres.
+
+## **6.7.** Comprobación
+
+```{r}
+prop.test(c(p1*length(m), p2*length(f)), c(length(m), length(f)), alternative="two.sided", conf.level=0.95, correct=FALSE)
+```
+
+El *p-valor* coincide con el calculado manualmente.
+
+# **7. Salario por hora**
+
+Creamos una nueva variable que represente los salarios por hora. Para ello, dividimos *WeeklyWages* entre *HoursWeek*:
+
+```{r}
+HourlyWages <- d$WeeklyWages/d$HoursWeek
+```
+
+Ahora dividimos los datos por sexo:
+
+```{r}
+m <- HourlyWages[d$Gender=="M"]
+f <- HourlyWages[d$Gender=="F"]
+```
+
+## **7.1.** Hipótesis nula y alternativa
+
+**H~0~**: *$\mu$~m~ = $\mu$~f~*
+
+**H~1~**: *$\mu$~m~ > $\mu$~f~*
+
+## **7.2.** Tipo de test
+
+Este test es esencialmente el mismo que el del apartado 4: se trata de un contraste **unilateral** de dos **muestras independientes** en el que se desconocen las varianzas. Tampoco sabemos si éstas son iguales, por lo que realizamos un test de **homoscedasticidad**:
+
+```{r}
+var.test(m, f)
+```
+
+Con este resultado se puede rechazar la homoscedasticidad: consideramos **varianzas distintas.**
+
+## **7.3.** Cálculo
+
+```{r}
+test.contraste.heteroscedicidad(m, f, 0.05, lowertrail=FALSE)
+```
+
+## **7.4.** Conclusión
+
+Estando el valor observado *0.709* en la región de aceptación [*-0.087*, *INF*] y con un *p-valor* mayor que *0.05*, no se puede rechazar la hipótesis nula. Por lo tanto, **no** podemos afirmar que los hombres cobran más que las mujeres por hora trabajada.
+
+## **7.5.** Comprobación
+
+```{r}
+t.test(m, f, alternative="greater", var.equal=FALSE)
+```
+
+Los valores coinciden con los calculados manualmente.
+
+# **8. Resumen ejecutivo**
+
+Tras estudiar los datos casos por caso para responder a las preguntas formuladas, hemos ido obteniendo cada vez más información.
+
+Primero, hemos concluído que los ingresos semanales de los hombres son mayores que los de las mujeres en promedio, incluso si éstas ingresasen 50€ más a la semana.
+
+Posteriormente hemos estudiado una de las posibles causas: el tipo de jornada; y hemos averiguado que los hombres trabajan proporcionalmente más a tiempo completo que las mujeres.
+
+Para conocer si esta causa es suficiente para explicar la primera conclusión, hemos calculado los ingresos por hora. De esta froma, no hemos podido confirmar que los hombres cobren más que las mujeres por hora trabajada.
+
+### Conclusión final
+
+Los hombres ingresan más que las mujeres por semana; sin embrago, éstas trabajan proporcionalmente menos horas, por lo que no se puede decir que los hombres ingresen más que las mujeres por cada hora trabajada.
