@@ -1,0 +1,978 @@
+---
+title: "A4 - Análisis de varianza y repaso del curso"
+subtittle: "Estadística Avanzada"
+author:
+- Javier Gómez de Diego
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **1. Introducción**
+
+Variables del fichero ***CensusIncomedata.txt***:
+
+- ***Age***: Edad del individuo.
+- ***Workclass***:  Categorización del individuo en base al perfil laboral.
+- ***Education_num***: Número de años de formación educativa del individuo.
+- ***Marital_status***: Estado civil del individuo.
+- ***Occupation***: Categorización del individuo en base a la tipología de trabajo.
+- ***Race***: Grupo racial al que pertenece el individuo.
+- ***Sex***: Género del individuo.
+- ***hours_per_week***: Horas por semana trabajadas por el individuo.
+- ***income***: Salario (anual) del individuo, en *k*€.
+
+# **2.  Lectura del archivo y preparación de los datos**
+
+Leemos y cargamos el archivo.
+
+```{r}
+adult <- read.delim("CensusIncomedata.txt", header = TRUE, sep = ' ', dec = ".")
+head(adult)
+```
+
+## **2.1.  Preparación de los datos**
+
+### **a)** Eliminar espacios en blancos de los valores categóricos
+
+Las variables catgóricas tienem un espacio en blanco al principio de cada valor. Los eliminamos.
+
+```{r}
+adult$workclass <- gsub(" ", "", adult$workclass)
+adult$marital_status <- gsub(" ", "", adult$marital_status)
+adult$occupation <- gsub(" ", "", adult$occupation)
+adult$race <- gsub(" ", "", adult$race)
+adult$sex <- gsub(" ", "", adult$sex)
+```
+
+### **b)** Nombre variable
+
+Cambiamos el nombre de la variable *sex* por *gender*.
+
+```{r}
+names(adult)[names(adult) == "sex"] <- "gender"
+```
+
+### **c)** *income*: Normalidad
+
+Analizamos visualmente la distribución de la variable *income* para estudiar su normalidad.
+
+```{r}
+hist(adult$income,
+     breaks = 'FD',
+     col = 'light blue',
+     main='Ingresos',
+     xlab='k€',
+     ylab='Frecuencia')
+```
+
+Se puede observar que, a la izquierda de la agrupación mayoritaria entorno a los *53k*€, la frecuencia disminuye en menor medida y de forma asimétrica con respecto a la derecha de la agrupación. Realizamos el test de *Lilliefors* para comprobar si se trata de una distribución normal o no.
+
+```{r}
+nortest::lillie.test(adult$income)
+```
+
+Como ***p-valor = 0***, se puede rechazar con un 95% de confianza la hipótesis nula, que afirma que se trata de una distribución normal. Por lo tanto, **la distribución de los ingresos anuales no sigue una distribución normal.**
+
+### **d)** *Less50*
+
+Creamos la nueva variable con los siguientes valores:
+
+- ***1***: si el valor de la variable *income* < ***50***.
+- ***0***: si el valor de la variable *income* >= ***50***.
+
+```{r}
+Less50 <- numeric()
+Less50[adult$income < 50] <- 1
+Less50[adult$income >= 50] <- 0
+adult$Less50 <- factor(Less50, levels = c(0, 1))
+head(adult[c(9,10)])
+```
+
+## **2.2.  Análisis visual**
+
+### **a)** *income* en función de variables categóricas
+
+#### ***gender***
+
+Primero, convertimos la variable *gender* en ***factor***.
+
+```{r}
+adult$gender <- factor(adult$gender)
+```
+
+Graficamos.
+
+```{r}
+plot(adult$gender, adult$income,
+     main = 'Distribución de income en función de gender',
+     xlab = 'gender',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+```
+
+Este gráfico nos muestra que el promedio del salario de los hombres es mayor que el de las mujeres. También se aprecia que la varianza es similar en ambos casos, y que existen más valores extremos en los valores de los ingresos de los hombres. Los ingresos más altos corresponden a los hombres, mientras que los más bajos corresponden a las mujeres, aunque en menor medida que en el caso anterior.
+
+#### ***race***
+
+Primero, convertimos la variable *race* en ***factor***.
+
+```{r}
+adult$race <- factor(adult$race)
+```
+
+Graficamos.
+
+```{r}
+plot(adult$race, adult$income,
+     main = 'Distribución de income en función de race',
+     xlab = 'race',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE,
+     xaxt='n')
+axis(side = 1, labels = FALSE)
+text(x = 1:length(levels(adult$race)),
+     y = par("usr")[3] - 5,
+     labels = levels(adult$race),
+     xpd = NA,
+     srt = 20,
+     adj = .7,
+     cex = .9)
+```
+
+Existe una alta similitud entre los ingresos de las personas de raza *Amer-Indian-Eskimo*, *Asian-Pac-Islander* y *Black*. Las de raza etiquetada como *Other* tienen una distribución de ingresos parecida a las anteriores, pero ésta se ve arrastrada hacia unos ingresos más bajos, lo que disminuye su promedio y su primer cuartil con respecto a las otras distribuciones. Ésto mismo ocurre con la distribución de las personas de raza *White*, pero en vez de verse arrastrada hacia ingresos más bajos, lo hace hacia los más altos.
+
+#### ***workclass***
+
+Primero, convertimos la variable *workclass* en ***factor***.
+
+```{r}
+adult$workclass <- factor(adult$workclass)
+```
+
+Graficamos.
+
+```{r}
+plot(adult$workclass, adult$income,
+     main = 'Distribución de income en función de workclass',
+     xlab = 'workclass',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+```
+
+Los trabajadores públicos (*Government*) y privados (*Private*) tienen una distribución de ingresos bastante parecida. La distribución de los del sector público tiene una varianza menor y una cola más corta hacia los ingresos más bajos, mientras que la de los trabajadores del sector privado se desvía más hacia estos valores, lo que hace que el promedio sea inferior. En cuanto a los ingresos de los autónomos (*Self-Employed*), su distribución tiene una varianza mucho menor, con algunos *outliers* de valores más bajos, y un promedio situado entre el de los trabajadores públicos y los privados. La distribución de ingresos de los trabajadores etiquetados como *Other/Unknown* es la que más se sitúa hacia los valores más bajos, con varianza similar a los de los dos primeros.
+
+#### ***marital_status***
+
+Primero, convertimos la variable *marital_status* en ***factor***.
+
+```{r}
+adult$marital_status <- factor(adult$marital_status)
+```
+
+Graficamos.
+
+```{r}
+plot(adult$marital_status, adult$income,
+     main = 'Distribución de income en función de marital_status',
+     xlab = 'marital_status',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+```
+
+Los divorciados (*Divorced*), los separados (*Separated*) y los solteros (*Single*) tienen una distribución de ingresos muy similar, con la diferencia de que el promedio de los separados es ligeramente inferior, y que los solteros con ingresos más bajos tienen un salario algo más inferior que los otros con ingresos más bajos de los anteriores dos grupos. En el caso de los viudos (*Widowed*), la varianza de su distribución de ingresos es menor que los anteriores, pero la distribución en general se sitúa en valores más bajos, al contrario que con los casados (*Married*). La distribución de éstos últimos se sitúa hacia los valores más altos y con una menor varianza, pero existen bastantes *outliers*, especialmente en valores bajos de ingresos.
+
+#### ***occupation***
+
+Primero, convertimos la variable *occupation* en ***factor***.
+
+```{r}
+adult$occupation <- factor(adult$occupation)
+```
+
+Graficamos.
+
+```{r}
+plot(adult$occupation, adult$income,
+     main = 'Distribución de income en función de occupation',
+     xlab = 'occupation',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE,
+     xaxt='n')
+axis(side = 1, labels = FALSE)
+text(x = 1:length(levels(adult$occupation)),
+     y = par("usr")[3] - 5,
+     labels = levels(adult$occupation),
+     xpd = NA,
+     srt = 20,
+     adj = .7,
+     cex = .9)
+```
+
+Los trabajadores *Blue-Collar* (trabajos manuales, p.ej. construcción) tienen una distribución de ingresos muy estrecha, orientada hacia ingresos más altos pero con *outliers* en valores inferiores. La distribución de ingresos de los *Wihte-Collar* (trabajos de oficina) es la que toca los valores más altos, pero su varianza es similar a la de las distribuciones de los ingresos de los trabajadores con ocupaciones etiquetadas como *Professional*, *Sales* y *Service*, cuyos promedios van descendiendo de forma ligera respectivamente. Por último, la ocupación etiquetada como *Other/Unknown* es la más desplazada hacia los ingresos más bajos.
+
+### **b)** & **c)** *income* en función de variables numéricas y tendencia
+
+#### ***age***
+
+Graficamos.
+
+```{r}
+rl <- lm(income ~ age, data=adult)
+ypred <- rl$fitted.values
+plot(adult$age, adult$income,
+     main = 'Tendencia entre las variables income y age',
+     xlab = 'age',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+lines(adult$age, ypred,
+      lwd = 2,
+      col = 'coral')
+```
+
+Podemos observar que existe una tendencia positiva entre ambas variables; es decir, que a medida que aumenta la edad de los trabajadores, sus ingresos tienden a incrementarse ligeramente. Sin embargo, esta tendencia no parece ser lineal, ya que hasta el rango de entre los *40* y los *50* años los ingresos aumentan, pero a partir de ahí comienzan a disminuir lentamente.
+
+#### ***hours_per_week***
+
+Graficamos.
+
+```{r}
+rl <- lm(income ~ hours_per_week, data=adult)
+ypred <- rl$fitted.values
+plot(adult$hours_per_week, adult$income,
+     main = 'Tendencia entre las variables income y hours_per_week',
+     xlab = 'hours_per_week',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+lines(adult$hours_per_week, ypred,
+      lwd = 2,
+      col = 'coral')
+```
+
+A medida que aumentan las horas trabajas, los ingresos anuales también se incrementan. Cabe destacar que en algunos valores de horas semanales, los ingresos tocan ambos extremos, como en el caso de *20* y *40* horas. La varianza de la distribución de los ingrsos en función de las horas semanales varía significativamente sin existir una tendencia para esta medida.
+
+#### ***education_num***
+
+Graficamos.
+
+```{r}
+rl <- lm(income ~ education_num, data=adult)
+ypred <- rl$fitted.values
+plot(adult$education_num, adult$income,
+     main = 'Tendencia entre las variables income y education_num',
+     xlab = 'education_num',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+lines(adult$education_num, ypred,
+      lwd = 2,
+      col = 'coral')
+```
+
+Probamos a graficar considerando *education_num* como una variable categórica.
+
+```{r}
+adult$education_num <- factor(adult$education_num)
+rl <- lm(income ~ education_num, data = adult)
+plot(adult$education_num, adult$income,
+     main = 'Tendencia entre las variables income y education_num',
+     xlab = 'education_num',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE)
+lines(adult$education_num, ypred,
+      lwd = 2,
+      col = 'coral')
+```
+
+Con esta consideración, se observa mejor la tendencia positiva entre las variables; es decir, a medida que aumentan los años de educación, también aumentan los ingresos anuales. Sin embargo, esta tendencia no es del todo lineal. A partir de los *3* o *4* años los ingresos comienzan a disminuir ligeramente hasta los *7* años de educación, donde la tendencia vuelve a ser positiva.
+
+# **3.  Estadística inferencial**
+
+## **3.1.  Contrastes de hipótesis**
+
+### **3.1.1.**  Hipótesis nula y alternativa
+
+#### *gender*
+
+Tratamos de responder a la pregunta ***¿cobran los hombres más que las mujeres?*** Para ello, nos fijaremos en la media de los ingresos de ambos grupos, por lo que formulamos las siguientes hipótesis:
+
+**H~0~**: *$\mu$~m~ = $\mu$~f~*
+
+**H~1~**: *$\mu$~m~ > $\mu$~f~*
+
+#### *race*
+
+Tratamos de responder a la pregunta ***¿cobra la gente blanca (al menos) 6450€ más al año que la gente negra?*** Este planteamiento es similar al del caso anterior, y podríamos replantear la pregunta a ***¿cobra la gente blanca (al menos) lo mismo que la gente negra si éstos últimos cobrasen en promedio 6450€ más?***:
+
+**H~0~**: *$\mu$~w~ = $\mu$~b~ + 6450*
+
+**H~1~**: *$\mu$~w~ > $\mu$~b~ + 6450*
+
+### **3.1.2.**  Justificación del test a aplicar
+
+#### *gender*
+
+Se trata de un test **unilateral** (se pregunta si los hombres solo cobran más que las mujeres) sobre la **media** de dos **muestras independientes** en el que se desconocen las varianzas. Para saber si éstas son iguales, realizamos un test de igualdad de varianzas u **homocedasticidad**:
+
+```{r}
+var.test(adult$income[adult$gender == 'Male'], adult$income[adult$gender == 'Female'])
+```
+
+Como el *p-valor* es aproximadamente igual a *0*, podemos rechazar con un 95% de confianza la hipótesis nula de que las varianzas son iguales, por lo que rechazamos la homocedasticidad: consideramos varianzas distintas.
+
+#### *race*
+
+Se trata de un test **unilateral** (se pregunta si la gente blanca solo cobra (al menos) 6450€ más que la gente negra) sobre la *media* de dos **muestras independientes** en el que se desconocen las varianzas. Para saber si éstas son iguales, realizamos un test de igualdad de varianzas u **homocedasticidad**:
+
+```{r}
+var.test(adult$income[adult$race == 'White'], (adult$income[adult$race == 'Black'] + 6450/1000))
+```
+
+Como el *p-valor* es aproximadamente igual a *0*, podemos rechazar con un 95% de confianza la hipótesis nula de que las varianzas son iguales, por lo que rechazamos la homocedasticidad: consideramos varianzas distintas.
+
+### **3.1.3.**   Aplicación, interpretación y comprobación del test
+
+Definimos la función para realizar los tests:
+
+```{r}
+test.contraste.con.heteroscedicidad <- function(m, f, a, lowertrail){
+  t <- (mean(m) - mean(f)) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+  
+  df <- ((var(m)/length(m)) + (var(f)/length(f)))^2 / (((var(m)/length(m))^2 / (length(m)-1))+(((var(f)/length(f))^2 / (length(f)-1))))
+  
+  p <- pt(t, lower.tail=lowertrail, df=df)
+  
+  if (lowertrail){
+    r <- (mean(m) - mean(f)) + (pt(a, df=df) * ((var(m)/length(m)) + (var(f)/length(f)))) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+    
+    cat("t = ", t, "\nGrados de libertad = ", df, "\nRegión de aceptación = ( -Inf, ", r, "]\np-valor = ", p)
+    
+  } else{
+    r <- (mean(m) - mean(f)) + (qt(a, df=df) * ((var(m)/length(m)) + (var(f)/length(f)))) / sqrt((var(m)/length(m)) + (var(f)/length(f)))
+    
+    cat("t = ", t, "\nGrados de libertad = ", df, "\nRegión de aceptación = [", r, ", Inf )\np-valor = ", p)
+    
+  }
+}
+```
+
+#### *gender*
+
+Llamamos a la función con los conjuntos de datos de los ingresos de los hombres y las mujeres, alfa = *0.05* y lowertrail = *FALSE*, ya que el contraste de hipótesis en este caso es unilateral por la derecha:
+
+```{r}
+test.contraste.con.heteroscedicidad(adult$income[adult$gender == 'Male'], adult$income[adult$gender == 'Female'], 0.05, FALSE)
+```
+
+El *p-valor* es ***0***, por lo que está por debajo del alfa *0.05*. Además el valor observado ***194.106*** es mayor que el valor crítico *10.70*. Por lo tanto, existe suficiente evidencia estadística para rechazar la hipótesis nula a favor de la alternativa y concluir que, **en promedio, los ingresos anuales de los hombres es superior al de las mujeres.**
+
+Comprobamos estos resultados con la función *t.test()* de *R*.
+
+```{r}
+t.test(adult$income[adult$gender == 'Male'], adult$income[adult$gender == 'Female'], alternative="greater", var.equal=FALSE)
+```
+
+Los resultados coinciden con los calculados manualmente.
+
+#### *race*
+
+Llamamos a la función con los conjuntos de datos de los ingresos de la gente blanca y la gente negra con el incremento de 6450€ de éstos últimos, alfa = *0.05* y lowertrail = *FALSE*, ya que el contraste de hipótesis en este caso es unilateral por la derecha:
+
+```{r}
+test.contraste.con.heteroscedicidad(adult$income[adult$race == 'White'], (adult$income[adult$race == 'Black'] + 6450), 0.05, FALSE)
+```
+
+El *p-valor* es ***1***, lo que está por encima del alfa *0.05*. Además el valor observado ***-68838.83*** es menor que el valor crítico *-6443.513*. Por lo tanto, no hay suficiente evidencia estadística para rechazar la hipótesis nula a favor de la alternativa y podemos concluir que, **en promedio, los ingresos anuales de las personas blancas no es (al menos) 6450€ superior al de los ingresos de las personas negras.**
+
+Comprobamos estos resultados con la función *t.test()* de *R*.
+
+```{r}
+t.test(adult$income[adult$race == 'White'], (adult$income[adult$race == 'Black'] + 6450), alternative="greater", var.equal=FALSE)
+```
+
+Los resultados coinciden con los calculados manualmente.
+
+# **4.  Modelo de regresión lineal**
+
+## **4.1.  Estimación de modelos**
+
+### **a)**  *income* ~ *age* + *education_num* + *hours_per_week* + *gender*
+
+Construimos el modelo.
+
+```{r}
+rl1 <- lm(income ~ age + education_num + hours_per_week + gender, data=adult)
+```
+
+### **b)**  *income* ~ *age* + *education_num* + *hours_per_week* + *gender* + *race*
+
+Construimos el modelo.
+
+```{r}
+rl2 <- lm(income ~ age + education_num + hours_per_week + gender + race, data=adult)
+```
+
+## **4.2.  Interpretación de los modelos**
+
+### **a)**  *income* ~ *age* + *education_num* + *hours_per_week* + *gender*
+
+```{r}
+summary(rl1)
+```
+
+Con un $R^{2}$ = ***0.5915***, el modelo construido tiene un grado de ajuste aceptable, sin llegar a ser excelente.
+
+La variable ***age*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal baja positiva entre *age* e *income*; es decir, a medida que aumenta la edad, lo hacen también los ingresos.
+
+La variable ***hours_per_week*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal baja positiva entre *hours_per_week* e *income*; es decir, a medida que aumentan las horas semanales trabajadas, lo hacen también los ingresos.
+
+Las variables *dummies* de ***education_num*** varían en su *p-valor*. Las que tienen un valor de *education_num* de ***5*** a ***16*** tienen un *p-valor* < ***0.05*** y/o cercano a ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa existiendo una relación lineal alta positiva entre *education_num* e *income*; es decir, a medida que aumentan las horas semanales trabajadas, lo hacen también los ingresos con respecto al valor base de *education_num* = *0*.
+Sin embargo, las que tienen un valor de *education_num* de ***2*** a ***4*** tienen un *p-valor* > ***0.05***, lo que significa que cuando esta variable toma dichos valores ésta no resulta ser más significativa para la variable *income* que cuando toma el valor base ***1***.
+
+La variable *dummy* de ***gender*** que etiqueta a los hombres tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal alta positiva entre *gender* e *income*; es decir, cuando *gender* toma el valor *Male*, incrementan los ingresos con respecto al valor base *Female* de la variable.
+
+### **b)**  *income* ~ *age* + *education_num* + *hours_per_week* + *gender* + *race*
+
+```{r}
+summary(rl2)
+```
+
+Con un $R^{2}$ = ***0.669***, el modelo construido tiene un grado de ajuste muy bueno, sin llegar a ser excepcional.
+
+La variable ***age*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal baja positiva entre *age* e *income*; es decir, a medida que aumenta la edad, lo hacen también los ingresos.
+
+La variable ***hours_per_week*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal baja positiva entre *hours_per_week* e *income*; es decir, a medida que aumentan las horas semanales trabajadas, lo hacen también los ingresos.
+
+Las variables *dummies* de ***education_num*** varían en su *p-valor*. Las que tienen un valor de *education_num* de ***7*** a ***16*** tienen un *p-valor* < ***0.05*** y/o cercano a ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa existiendo una relación lineal alta positiva entre *education_num* e *income*; es decir, a medida que aumentan las horas semanales trabajadas, lo hacen también los ingresos con respecto al valor base de *education_num* = *0*.
+Sin embargo, las que tienen un valor de *education_num* de ***2*** a ***6*** tienen un *p-valor* > ***0.05***, lo que significa que cuando esta variable toma dichos valores ésta no resulta ser más significativa para la variable *income* que cuando toma el valor base ***1***.
+
+La variable *dummy* de ***gender*** que etiqueta a los hombres (*Male*) tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal alta positiva entre *gender* e *income*; es decir, cuando *gender* toma el valor *Male*, incrementan los ingresos con respecto al valor base *Female* de la variable.
+
+Las variables *dummies* de ***race*** correspondientes a los valores ***Black***, ***White*** y ***Other*** tiene un *p-valor* = ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para la variable dependiente; sin embargo, la relación lineal varía según el valor de *race*.
+Cuando ésta toma los valores ***Black*** y ***White*** existe una relación lineal alta positiva; es decir, cuando la variable *race* toma estos valores, incrementan los ingresos con respecto al valor base *Amer-Indian-Eskimo* de la variable.
+Por otro lado, cuando ésta toma el valor ***Other*** existe una relación lineal negativa; es decir, cuando la variable *race* toma este valor, disminuyen los ingresos con respecto al valor base *Amer-Indian-Eskimo* de la variable.
+Con el valor ***Asian-Pac-Islander*** de esta variable, el *p-valor* > ***0.05***, lo que significa que cuando *race* toma dicho valores ésta no resulta ser significativa para la variable *income*.
+
+La variable ***race*** ha mejorado el ajuste del modelo con respecto al primero, por lo que aporta información útil para explicar la variable *income*.
+
+## **4.3.  Análisis de residuos**
+
+### **a)**  Valores estimados de los estadísticos
+
+```{r}
+summary(rl2)
+```
+
+La variable ***age*** tiene un *t value* = ***45.664***, lo que significa que el error cometido en el valor estimado es bajo dado que éste se aleja *45.664* desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es baja. Con ésto podemos afirmar que existe una relación entre *income* y *age*.
+
+La variable ***hours_per_week*** tiene un *t value* = ***36.932***, lo que significa que el error cometido en el valor estimado es bajo dado que éste se aleja *36.932* desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es baja. Con ésto podemos afirmar que existe una relación entre *income* y *hours_per_week*.
+
+Las variables *dummies* de ***education_num2*** a ***education_num6*** tienen un *t value* < ***2***, lo que significa que el error cometido en el valor estimado es alto dado que éste se aleja muy pocas desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es alta. Con ésto podemos afirmar que no existe una relación entre *income* y estas variables *dummies* de *education_num*.
+Por otro lado, las variables *dummies* de ***education_num7*** a ***education_num16*** tienen un *t value* de entre ***2.5*** y ***9.5***, lo que significa que el error cometido en el valor estimado no es muy alto dado que éste se aleja un número relevante de desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es relativamente baja Con ésto podemos afirmar que existe una relación entre *income* y estas variables *dummies* de *education_num*.
+
+La variable *dummy* de ***gender*** que etiqueta a los hombres (*Male*) tiene un *t value* = ***196.343***, lo que significa que el error cometido en el valor estimado es bajo dado que éste se aleja *196.343* desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es baja. Con ésto podemos afirmar que existe una relación entre *income* y la variable *dummy* *gender* para el valor *Male*.
+
+Las variables *dummies* de ***race*** correspondientes a los valores ***Black***, ***White*** y ***Other*** tienen un *t value* bastante alejado de ***0***, lo que significa que el error cometido en el valor estimado es bajo dado que éste se aleja bastantes desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es baja Con ésto podemos afirmar que existe una relación entre *income* y estas variables *dummies* de *race*.
+Por otro lado, la variable *dummy* ***raceAsian-Pac-Islander*** tiene un *t value* = ***-0.807***, lo que significa que el error cometido en el valor estimado es alto dado que éste se aleja *-0.807* desviaciones estándar de *0*. Por lo tanto, la probabilidad de que el coeficiente sea distinto de *0* es alta Con ésto podemos afirmar no que existe una relación entre *income* y *race* cuando ésta última toma el valor *Asian-Pac-Islander*.
+
+### **b)**  Análisis visual de los residuos
+
+```{r}
+hist(rl2$residuals,
+     breaks = 'FD',
+     col = 'light blue',
+     main='Residuos',
+     xlab='',
+     ylab='Frecuencia')
+```
+
+Visualmente, se ve una clara simetría en la distribución de los residuos centrada en *0*, lo que indica que los errores comentidos por el modelo al predecir los valores no se alejan demasiado. Para estudiar la normalidad, visualizamos el *Q-Q plot* y realizamos el test de *Lilliefors*.
+
+```{r}
+plot(rl2,
+     which=2,
+     pch = 19,
+     cex = .5,
+     col = 'light blue')
+nortest::lillie.test(rl2$residuals)
+```
+
+El *Q-Q plot* nos confirma lo que hemos visto en el histograma de los residuos. Sim embargo, el *p-valor* del test es inferior a *0.05*, por lo que no existe normalidad en la distribución de los residuos. No obstante, aceptaremos estos resultados como buenos indicadores del modelo.
+
+## **4.4.  Predicción**
+
+Predecimos el valor de *income* y su intervalo de confianza del *95*% con los siguientes valores de las variable independientes:
+
+- ***age*** = *24*
+- ***education_num*** = *4*
+- ***hours_per_week*** = *40*
+- ***gender*** = *Female*
+- ***race*** = *Black*
+
+```{r}
+predict(rl2,
+        data.frame(age = c(24),
+                   education_num = c('4'),
+                   hours_per_week = c(40),
+                   gender = c('Female'),
+                   race = c('Black')
+                   ),
+        interval = "prediction",
+        level = .95
+        )
+```
+
+El valor del ingreso predicho por el modelo según los valores de las variables independientes indicados es de ***34.75*****k€** al año, con in intervalo de confianza de [***26.74***, ***42.76***] al *95*%.
+
+# **5. Regressión logística**
+
+Utilizaremos las seiguientes variables explicativas:
+
+- ***age***
+- ***workclass***
+- ***education_num***
+- ***marital_status***
+- ***occupation***
+- ***race***
+- ***gender***
+- ***hours_per_week***
+
+## **5.1.  Generación de los conjuntos de entrenamiento y de test**
+
+*80*% para entrenamiento y *20*% para test.
+
+```{r}
+set.seed(123)
+i = sort(sample(nrow(adult), nrow(adult) * .8))
+train <- adult[i, c('Less50', 'age', 'workclass', 'education_num', 'marital_status', 'occupation', 'race', 'gender', 'hours_per_week')]
+test <- adult[-i, c('Less50', 'age', 'workclass', 'education_num', 'marital_status', 'occupation', 'race', 'gender', 'hours_per_week')]
+```
+
+## **5.2.  Modelo predictivo**
+
+Establecemos como valores de referencia los mayoritarios.
+
+```{r}
+train$workclass <- relevel(train$workclass, ref=names(sort(table(train$workclass),decreasing=TRUE)[1]))
+train$education_num <- relevel(train$education_num, ref=names(sort(table(train$education_num),decreasing=TRUE)[1]))
+train$marital_status <- relevel(train$marital_status, ref=names(sort(table(train$marital_status),decreasing=TRUE)[1]))
+train$occupation <- relevel(train$occupation, ref=names(sort(table(train$occupation),decreasing=TRUE)[1]))
+train$race <- relevel(train$race, ref=names(sort(table(train$race),decreasing=TRUE)[1]))
+train$gender <- relevel(train$gender, ref=names(sort(table(train$gender),decreasing=TRUE)[1]))
+```
+
+Construimos el modelo con los datos de entrenamiento.
+
+```{r}
+rl <- glm(Less50 ~ age + workclass + education_num + marital_status + occupation + race + gender + hours_per_week,
+          family=binomial(link='logit'),
+          data = train)
+```
+
+## **5.3.  Interpretación**
+
+```{r}
+summary(rl)
+```
+
+La variable ***age*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal negativa entre *age* e *income*; es decir, por cada año de edad que se incrementa, la probabilidad de cobrar menos de *50*k€ disminuye ***0.028***.
+
+Todas las variables *dummies* de ***workclass*** tienen un *p-valor* = ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para explicar la variable *Less50*. En concreto, cada una de ellas influye de la siguiente manera:
+
+- ***workclassGovernment***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *Government*, la probabilidad de cobrar menos de *50*k€ disminuye ***3.509*** con respecto a cuando ésta toma el valor base *Private*.
+- ***workclassOther/Unknown***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Other/Unknown*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.747*** con respecto a cuando ésta toma el valor base *Private*.
+- ***workclassSelf-Employed***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Self-Employed*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.501*** con respecto a cuando ésta toma el valor base *Private*.
+
+Todas las variables *dummies* de ***education_num***, excepto cuándo ésta toma el valor *8* (lo que significa que cuando la variable toma dicho valor ésta no resulta ser más significativa para la variable *income* que cuando toma el valor base ***9***.), tienen un *p-valor* < ***0.05*** y/o cercano a ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para explicar la variable *Less50*. En concreto, cada una de ellas influye de la siguiente manera:
+
+- ***education_num1***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *1*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.919*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num2***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *2*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.635*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num3***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *3*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.562*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num4***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *4*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.634*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num5***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *5*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.094*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num6***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *6*, la probabilidad de cobrar menos de *50*k€ aumenta ***0.845*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num7***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *7*, la probabilidad de cobrar menos de *50*k€ aumenta ***0.570*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num10***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *10*, la probabilidad de cobrar menos de *50*k€ disminuye ***0.344*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num11***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *11*, la probabilidad de cobrar menos de *50*k€ disminuye ***0.917*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num12***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *12*, la probabilidad de cobrar menos de *50*k€ disminuye ***0.792*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num13***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *13*, la probabilidad de cobrar menos de *50*k€ disminuye ***1.303*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num14***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *14*, la probabilidad de cobrar menos de *50*k€ disminuye ***1.318*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num15***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *15*, la probabilidad de cobrar menos de *50*k€ disminuye ***1.595*** con respecto a cuando ésta toma el valor base *9*.
+- ***education_num16***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *16*, la probabilidad de cobrar menos de *50*k€ disminuye ***1.949*** con respecto a cuando ésta toma el valor base *9*.
+
+Todas las variables *dummies* de ***marital_status*** tienen un *p-valor* = ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para explicar la variable *Less50*. En concreto, cada una de ellas influye de la siguiente manera:
+
+- ***marital_statusDivorced***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Divorced*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.689*** con respecto a cuando ésta toma el valor base *Married*.
+- ***marital_statusSeparated***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Separated*, la probabilidad de cobrar menos de *50*k€ aumenta ***3.478*** con respecto a cuando ésta toma el valor base *Married*.
+- ***marital_statusSingle***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Single*, la probabilidad de cobrar menos de *50*k€ aumenta ***3.467*** con respecto a cuando ésta toma el valor base *Married*.
+- ***marital_statusWidowed***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Widowed*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.825*** con respecto a cuando ésta toma el valor base *Married*.
+
+Todas las variables *dummies* de ***occupation*** tienen un *p-valor* = ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para explicar la variable *Less50*. En concreto, cada una de ellas influye de la siguiente manera:
+
+- ***occupationOther/Unknown***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Other/Unknown*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.654*** con respecto a cuando ésta toma el valor base *Blue-Collar*.
+- ***occupationProfessional***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Professional*, la probabilidad de cobrar menos de *50*k€ aumenta ***1.790*** con respecto a cuando ésta toma el valor base *Blue-Collar*.
+- ***occupationSales***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Sales*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.632*** con respecto a cuando ésta toma el valor base *Blue-Collar*.
+- ***occupationService***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Service*, la probabilidad de cobrar menos de *50*k€ aumenta ***2.599*** con respecto a cuando ésta toma el valor base *Blue-Collar*.
+- ***occupationWhite-Collar***: tiene una relación lineal negativa con *Less50*; es decir, cuando la variable *education_num* toma el valor *White-Collar*, la probabilidad de cobrar menos de *50*k€ disminuye ***1.729*** con respecto a cuando ésta toma el valor base *Blue-Collar*.
+
+Todas las variables *dummies* de ***race*** tienen un *p-valor* = ***0***, lo que significa que cuando esta variable toma dichos valores resulta significativa para explicar la variable *Less50*. En concreto, cada una de ellas influye de la siguiente manera:
+
+- ***raceAmer-Indian-Eskimo***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Amer-Indian-Eskimo*, la probabilidad de cobrar menos de *50*k€ aumenta ***7.798*** con respecto a cuando ésta toma el valor base *White*.
+- ***raceAsian-Pac-Islander***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Asian-Pac-Islander*, la probabilidad de cobrar menos de *50*k€ aumenta ***7.810*** con respecto a cuando ésta toma el valor base *White*.
+- ***raceBlack***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Black*, la probabilidad de cobrar menos de *50*k€ aumenta ***6.322*** con respecto a cuando ésta toma el valor base *White*.
+- ***raceOther***: tiene una relación lineal positiva con *Less50*; es decir, cuando la variable *education_num* toma el valor *Widowed*, la probabilidad de cobrar menos de *50*k€ aumenta ***10.124*** con respecto a cuando ésta toma el valor base *White*.
+
+La variable *dummy* de ***gender*** que etiqueta a las mujeres (*Female*) tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal positiva con *Less50*; es decir, cuando la variable *gender* toma el valor *Female*, la probabilidad de cobrar menos de *50*k€ aumenta ***8.401*** con respecto a cuando ésta toma el valor base *Male*.
+
+La variable ***hours_per_week*** tiene un *p-valor* = ***0***, lo que significa que es significativa existiendo una relación lineal negativa entre *hours_per_week* e *income*; es decir, por cada hora semanal que se incrementa, la probabilidad de cobrar menos de *50*k€ disminuye ***0.026***.
+
+## **5.4.  Matriz de confusión**
+
+Realizamos la predicción con los datos de *test* y construimos la matriz de confusión.
+
+```{r}
+p <- predict(rl,
+        test[,!names(test) %in% c('Less50')],
+        type = 'response'
+        )
+p <- ifelse(p > 0.5, 1, 0)
+library(caret)
+confusionMatrix(test$Less50, factor(p))
+```
+
+La matriz de confusión muestra ***2995*** **verdaderos negativos** y ***3019*** **verdaderos positivos**, por los ***230*** **falsos negativos** y ***268*** **falsos positivos**.
+
+La sensibilidad es ***0.9179***, que es una probabilidad alta (*91.79*%) de predecir acertadamente los ingresos menores de *50*k€ entre aquellos que, efectivamente, ingresan menos de esa cantidad. Por otro lado, la especificidad es ***0.9292***, lo que indica también una probabilidad alta (*92.92*%) de predecir acertadamente los ingresos mayores de *50*k€ entre aquellos que, efectivamente, ingresan más de esa cantidad.
+
+Por lo tanto, el modelo tiene una gran capacidad de predecir acertadamente si una persona cobra más o menos de *50*k€ anuales.
+
+## **5.4.  Predicción**
+
+### **a)**  Caso 1
+
+Realizamos la predicción con los siguientes valores de las variables independientes:
+
+- ***gender***: *Male*
+- ***race***: *White*
+- ***age***: *20*
+- ***workclass***: *Self-Employed*
+- ***education_num***: *3*
+- ***marital_status***: *Single*
+- ***occupation***: *Professional*
+- ***hours_per_week***: *25*
+
+```{r}
+1/(1+exp(-1*(rl$coefficients['(Intercept)'] + (rl$coefficients['age'] * 20) + rl$coefficients['workclassSelf-Employed'] + rl$coefficients['education_num3'] + rl$coefficients['marital_statusSingle'] + rl$coefficients['occupationProfessional'] + (rl$coefficients['hours_per_week'] * 25))))
+```
+
+La probabilidad de que una persona con las características anteriores ingrese menos de *50*k€ anuales es de ***0.9972*** (***99.72%***).
+
+Comprobamos el resultado con la función *predict()* de *R*.
+
+```{r}
+predict(rl,
+        data.frame(gender = c('Male'),
+                   race = c('White'),
+                   age = c(20),
+                   workclass = c('Self-Employed'),
+                   education_num = c('3'),
+                   marital_status = c('Single'),
+                   occupation = c('Professional'),
+                   hours_per_week = c(25)
+                   ),
+        type = 'response'
+        )
+```
+
+El valor predicho coincide con el valor calculado manualmente.
+
+### **b)**  Caso 2
+
+Realizamos la predicción con los siguientes valores de las variables independientes:
+
+- ***gender***: *Male*
+- ***race***: *Black*
+- ***age***: *60*
+- ***workclass***: *Government*
+- ***education_num***: *15*
+- ***marital_status***: *Married*
+- ***occupation***: *White-Collar*
+- ***hours_per_week***: *35*
+
+```{r}
+1/(1+exp(-1*(rl$coefficients['(Intercept)'] + rl$coefficients['raceBlack'] + (rl$coefficients['age'] * 60) + rl$coefficients['workclassGovernment'] + rl$coefficients['education_num15'] + rl$coefficients['occupationWhite-Collar'] + (rl$coefficients['hours_per_week'] * 35))))
+```
+
+La probabilidad de que una persona con las características anteriores ingrese menos de *50*k€ anuales es de ***0.00488*** (***0.488%***).
+
+Comprobamos el resultado con la función *predict()* de *R*.
+
+```{r}
+predict(rl,
+        data.frame(gender = c('Male'),
+                   race = c('Black'),
+                   age = c(60),
+                   workclass = c('Government'),
+                   education_num = c('15'),
+                   marital_status = c('Married'),
+                   occupation = c('White-Collar'),
+                   hours_per_week = c(35)
+                   ),
+        type = 'response'
+        )
+```
+
+El valor predicho coincide con el valor calculado manualmente.
+
+# **6. Análisis de la varianza (ANOVA) de un factor**
+
+## **6.1.  Visualización**
+
+```{r}
+plot(adult$race, adult$income,
+     main = 'Distribución de income en función de race',
+     xlab = 'race',
+     ylab = 'income',
+     pch = 19,
+     cex = .5,
+     col = 'light blue',
+     frame = FALSE,
+     xaxt='n')
+axis(side = 1, labels = FALSE)
+text(x = 1:length(levels(adult$race)),
+     y = par("usr")[3] - 5,
+     labels = levels(adult$race),
+     xpd = NA,
+     srt = 20,
+     adj = .7,
+     cex = .9)
+```
+
+Existe una alta similitud entre los ingresos de las personas de raza *Amer-Indian-Eskimo*, *Asian-Pac-Islander* y *Black*. Las de raza etiquetada como *Other* tienen una distribución de ingresos parecida a las anteriores, pero ésta se ve arrastrada hacia unos ingresos más bajos, lo que desplaza toda la distribución hacia estos valores con respecto a las otras distribuciones, aumentando también ligeramente la varianza. Ésto mismo ocurre con la distribución de las personas de raza *White*, pero en vez de verse arrastrada hacia ingresos más bajos, lo hace hacia los más altos.
+
+Con este gráfico, podríamos intuir que existen diferencias entre los distintos grupos *race* en relación con los ingresos.
+
+## **6.2.  Modelo ANOVA**
+
+### **6.2.1.**  Formula el modelo
+
+El modelo *ANOVA* compara la media de las distribuciones estudiando las varianzas, y determina si hay diferencias entre las medias de la variable dependiente para cada valor de la variable o variables independientes. Para ello, formula las siguientes hipótesis:
+
+### **6.2.2.**  Hipótesis nula y alternativa
+
+**H~0~**: *$\mu$~VariableDependiente[Valor1_VariableIndependiente]~ = $\mu$~VariableDependiente[Valor2_VariableIndependiente]~ = ... = $\mu$~VariableDependiente[ValorN_VariableIndependiente]~*
+
+**H~1~**: *$\mu$~VariableDependiente[ValorM_VariableIndependiente]~ $\neq$ $\mu$~VariableDependiente[ValorN_VariableIndependiente]~ (al menos una de las medias es diferente)*
+
+### **6.2.3.**   Signifcación del factor grupo racial
+
+```{r}
+a <- aov(income ~ race, data = adult)
+summary(a)
+summary(a)[[1]][1, 'Sum Sq'] / (summary(a)[[1]][1, 'Sum Sq'] + summary(a)[[1]][2, 'Sum Sq'])
+```
+
+La varianza explicada por la variable independiente se puede obtener a diviendo la suma de los cuadrados de la regresión entre la suma de los cuadrados totales (regresión + residuos), lo que resulta en este caso en una varianza explicada por la variable *race* del ***12.93%***  sobre la variable *income*.
+
+### **6.2.4.**   Efectos de los niveles de factor
+
+Dado que el *p-valor* = ***0***, existe evidencia estadística suficiente para rechazar la hipótesis nula de que la media de los ingresos de los distintos grupos raciales es igual en favor de la hipótesis alternativa, por lo que existe un efecto significativo de los distintos valores de la variable *race* sobre la variable *income*.
+
+```{r}
+a$coefficients
+```
+
+- Cuando el valor observado es ***Asian-Pac-Islander***, la variable *income* se incrementa en un factor de ***1,012*** con respecto al valor que tomaría con el valor base *Amer-Indian-Eskimo*.
+- Cuando el valor observado es ***Black***, la variable *income* se incrementa en un factor de ***1,26*** con respecto al valor que tomaría con el valor base *Amer-Indian-Eskimo*.
+- Cuando el valor observado es ***Other***, la variable *income* disminuye en un factor de ***4,283*** con respecto al valor que tomaría con el valor base *Amer-Indian-Eskimo*.
+- Cuando el valor observado es ***White***, la variable *income* se incrementa en un factor de ***7.9*** con respecto al valor que tomaría con el valor base *Amer-Indian-Eskimo*.
+
+### **6.2.5.**   Contrastes dos-a-dos
+
+```{r}
+t <- TukeyHSD(a)
+t
+plot(t)
+```
+
+Solo hay dos parejas de valores que no son estadísticamente significativas (*p adj* > *0.05*):
+
+- ***Asian-Pac-Islander*** & ***Amer-Indian-Eskimo***
+- ***Black*** & ***Asian-Pac-Islander***
+
+Por lo que el resto de parejas sí lo son dado que *p adj* < *0.05*:
+
+- ***Black*** & ***Amer-Indian-Eskimo***
+- ***Other*** & ***Amer-Indian-Eskimo***
+- ***White*** & ***Amer-Indian-Eskimo***
+- ***Other*** & ***Asian-Pac-Islander***
+- ***White*** & ***Asian-Pac-Islander***
+- ***Other*** & ***Black***
+- ***White*** & ***Black***
+- ***White*** & ***Other***
+
+```{r}
+library('agricolae')
+h <- HSD.test(a, 'race', group = TRUE)
+h
+```
+
+Por lo tanto, los valores se agrupan de la siguiente manera:
+
+- ***a***: *White*
+- ***b***: *Black* y *Black* & *Asian-Pac-Islander* (la pareja sin significancia estadística)
+- ***c***: *Amer-Indian-Eskimo* y *Asian-Pac-Islander* & *Amer-Indian-Eskimo* (la otra pareja sin significancia estadística)
+- ***c***: *Other*
+
+### **6.2.6.**   Adecuación del modelo
+
+#### **6.2.6.1.**  *Homocedasticidad de los residuos*
+
+```{r}
+plot(a,
+     which = 1,
+     pch = 19,
+     cex = .5,
+     col = 'light blue')
+```
+
+Se puede apreciar que la distribución de los puntos entorno a la línea del *0* es bastante aleatoria, lo que indica que existe cierta linealidad entre las variables.
+
+#### **6.2.6.2.**  *Normalidad de los residuos*
+
+```{r}
+plot(a,
+     which = 2,
+     pch = 19,
+     cex = .5,
+     col = 'light blue')
+```
+
+Visualmente, el gráfico *cuantil-cuantil* no se asemeja a una linea recta, por lo que no podemos asumir la normalidad de los residuos.
+
+Aplicamos ahora el test de *Kruskal-Wallis*.
+
+```{r}
+kruskal.test(income ~ race, data = adult) 
+```
+
+Con un ***p-valor*** = ***0*** podemos asumir que existen diferencias estadísticamente significativas entre los distintos grupos de *race* en cuanto a los ingresos anuales.
+
+# **7.  ANOVA multifactorial**
+
+## **7.1.  Estudio visual de la interacción**
+
+### **a)** Tabla cruzada entre *race* y *occupation*
+
+```{r}
+table(adult$race, adult$occupation)
+```
+
+Como se puede observar, existe un gran desbalanceamiento de los datos en cuanto a los grupos por raza y empleo. Por ejemplo, hay *8714* observaciones de personas blancas con ocupación de *Blue-Collar*, mientras que tan solo existen *26* registros de personas de raza *Amer-Indian-Eskimo* y el empleo de ventas (*Sales*).
+
+Con este desbalanceamiento puede no definirse la diferencia entre el efecto que tiene una variable y el efecto que tiene la otra sobre la variable dependiente. Esto se debe a que las variables interaccionan estre sí y se hace imposible distinguir a qué variable independiente (o en qué medida) se debe el valor de la variable dependiente cuando se trata de explicar en función de éstas. Como consecuencia, cuando cierta varianza del *output* se debe a las variables predictoras, no se puede saber cuál de ellas es la causante, por lo que *ANOVA* la asignará incorrectamente.
+
+### **b)** Visualización de la interacción
+
+```{r}
+interaction.plot(x.factor = adult$occupation, #x-axis variable
+                 trace.factor = adult$race, #variable for lines
+                 response = adult$income, #y-axis variable
+                 ylab = "Income",
+                 xlab = "Occupation",
+                 col = c('coral', 'green', 'black', 'light blue', 'grey'),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Race",
+                 xaxt='n')
+axis(side = 1, labels = FALSE)
+text(x = 1:length(levels(adult$occupation)),
+     y = par("usr")[3] - 1.5,
+     labels = levels(adult$occupation),
+     xpd = NA,
+     srt = 20,
+     adj = .7,
+     cex = .9)
+```
+
+En el gráfico de interacción se pueden observar dos intersecciones:
+
+- ***Asian-Pac-Islander*** & ***Amer-Indian-Eskimo***
+- ***Black*** & ***Asian-Pac-Islander***
+
+Dichas intersecciones con coherentes con las parejas de valores que no eran signficativas en el *HDS test* realizado previamente.
+
+Por lo tanto, podemos concluir que sí existe interacción entre las variables *race* y *occupation*.
+
+# **8.  Conclusiones**
+
+La variableobjetivo del dataset es ***income***, que muestra los ingresos anuales. Las estudiar su normalidad, podemos concluir que su distribución no sigue una normal. Para realizar otro tipo de estudios sobre los ingresos anuales, se ha creado la variable ***Less50***, que indica con un *1* si éstos son inferiores a *50*k€, y *0* en caso contrario.
+
+Tras adecuar las variables estudiando sus valores y distribuciones, y tras convertirlas en el tipo de variable más adecuado, se ha analizado la influencia de éstas con la variable objetivo *income*. Aquellas de tipo *factor* en las que se puede ver cierta influencia son: *gender*, *race*, *workclass*, *marital status*, *occupation* y *education_num* (esta última era numérica inicialmente, pero tras estudiar su relación con *income* se vio que era más adecuada tratarla como *factor*), ya que la distribución de los ingresos para los distintos valores de cada variable difiere. Por otro lado, también se ha encontrado cierta tendencia positiva entre la variable objetivo y las variables numércias *age* y *hours_per_week*.
+
+Posteriormente se ha llevadon a cabo dos análisis mediante contrastes de hipótesis para responder a las siguientes preguntas:
+
+- **¿Cobran los hombres más que las mujeres?**: Sí, se puede afrimar con suficiente evidencia estadística que los hombres cobran más que las mujeres en promedio.
+- **¿Cobra la gente blanca (al menos) 6450€ más al año que la gente negra?**: No hay suficiente evidencia estadística para afirmar que la gente blanca cobra (al menos) 6450€ más que la gente negra en promedio.
+
+También se ha llevado a cabo un modelo de regresión lineal para tratar de explicar la variable *income* en función de:
+
+- ***age***, ***education_num***, ***hours_per_week*** y ***gender***: El ajuste de este modelo es aceptable, siendo todas las variables significativas a expcepción de algunos grupos de *education_num*.
+
+A este modelo se le ha añadido también la variable *race*:
+
+- ***age***, ***education_num***, ***hours_per_week***, ***gender*** y ***race***: El ajuste de este modelo es bueno, mejorando al ajuste del modelo anterior tras añadir la variable *race*. Todas las variables resultan ser significativas para explicar la variable *income*, salvo algunos grupos de *education_num* y el grupo *Asian-Pac-Islander* de la variable *race*.
+
+El análisis de los residuos de este último modelo indica que existe una relación entre las variables independientes e *income*, con las excepciones anteriores. La distribución de estos residuos no sigue una normal.
+
+A continuación, se ha construido un modelo de regresión logística con la variable dependiente *Less50* en función de:
+
+- ***age***, ***workclass***, ***education_num***, ***marital_status***, ***occupation***, ***race***, ***gender***, ***hours_per_week***: se han utilizado el *80*% de las observaciones para entrenar el modelo y el *20*% para testearlo, resultando en una sensibilidad de *0,9179* y una especificidad de *0,9292*. Todas las variables son significativas para el modelo salvo para un grupo de la variable *education_num*. Sin embargo, no todas ellas tienen la misma relación lineal con la variable objetivo ya que algunas muestran una ralación positiva y otras una relación negativa, difiriendo incluso grupos dentro de la misma variable independiente.
+
+Posteriormente se ha realizado un análisis de la varianza mediante *ANOVA* con la variable dependiente *income* y la variable independiente *race*, concluyendo en que existe un efecto significativo de los distintos valores de la variable *race* sobre la variable *income*.
+
+Se ha llevado a cabo también un contraste dos-a-dos en el que tan solo dos parejas de grupo raciales no han resultado ser estadísticamente significativas:
+
+- ***Asian-Pac-Islander*** & ***Amer-Indian-Eskimo***
+- ***Black*** & ***Asian-Pac-Islander***
+
+Tras revisar el gráfico *fitted vs. residuals* se ha podido concluir que existe cierta linealidad entre las variables, por lo que se da la homocedasticidad de los residuos. Sin embargo, el *Q-Q plot* no refleja la normalidad de su distribución. Por último, con el test de *Kruskal-Wallis* podemos afirmar que existen diferencias estadísticamente significativas entre los distintos grupos de *race* en cuanto a los ingresos anuales.
+
+Para finalizar, en previsión de un potencial modelo *ANOVA* multifactorial con las variables independientes *race* y *occupation* se ha observado que existe un desbalanceamiento de los datos, con lo que puede no definirse la diferencia entre el efecto que tiene una variable y el efecto que tiene la otra sobre la variable dependiente. Esto se debe a que las variables interaccionan estre sí y se hace imposible distinguir a qué variable independiente (o en qué medida) se debe el valor de la variable dependiente cuando se trata de explicar en función de éstas. Como consecuencia, cuando cierta varianza del output se debe a las variables predictoras, no se puede saber cuál de ellas es la causante, por lo que ANOVA la asignará incorrectamente.
+
+También se ha visualizado la interacción entre los valores de dichas variables, concluyendo que existe una interacción debido a siguientes parejas de variables:
+
+- ***Asian-Pac-Islander*** & ***Amer-Indian-Eskimo***
+- ***Black*** & ***Asian-Pac-Islander***
